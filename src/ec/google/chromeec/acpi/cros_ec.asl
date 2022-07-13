@@ -13,34 +13,6 @@ Device (CREC)
 #endif
 #endif
 
-#ifdef EC_SYNC_IRQ_WAKE_CAPABLE
-	#define EC_SYNC_SHARE_TYPE ExclusiveAndWake
-#else
-	#define EC_SYNC_SHARE_TYPE Exclusive
-#endif
-
-#ifdef EC_ENABLE_SYNC_IRQ
-	Name (_CRS, ResourceTemplate ()
-	{
-		Interrupt (ResourceConsumer, Level, ActiveLow,
-			   EC_SYNC_SHARE_TYPE)
-		{
-			EC_SYNC_IRQ
-		}
-	})
-#endif
-
-#ifdef EC_ENABLE_SYNC_IRQ_GPIO
-	Name (_CRS, ResourceTemplate ()
-	{
-		GpioInt (Level, ActiveLow, EC_SYNC_SHARE_TYPE, PullDefault,
-			 0x0000, "\\_SB.GPIO", 0x00, ResourceConsumer, ,)
-		{
-			EC_SYNC_IRQ
-		}
-	})
-#endif
-
 #ifdef EC_ENABLE_MKBP_DEVICE
 	Device (CKSC)
 	{
