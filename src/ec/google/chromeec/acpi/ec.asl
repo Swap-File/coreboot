@@ -231,7 +231,7 @@ Device (EC0)
 	{
 #ifdef EC_ENABLE_KEYBOARD_BACKLIGHT
 		/* Notify Windows Keyboard Backlight driver of S0ix state transition */
-		Notify (^CREC.KBLT, Arg0)
+		Notify (\_SB.CREC.KBLT, Arg0)
 #endif
 	}
 
@@ -406,7 +406,7 @@ Device (EC0)
 	Method (_Q16, 0, NotSerialized)
 	{
 		Printf ("EC: GOT PD EVENT")
-		Notify (\_SB.PCI0.LPCB.EC0.CREC.ECPD, 0x80)
+		Notify (\_SB.CREC.ECPD, 0x80)
 		If (CondRefOf (\_SB.DPTF.TPWR)) {
 			Notify (\_SB.DPTF.TPWR, POWER_STATE_CHANGE_NOTIFICATION)
 		}
@@ -452,7 +452,7 @@ Device (EC0)
 	Method (_Q1C, 0, NotSerialized)
 	{
 		Printf ("EC: USB MUX")
-		Notify (\_SB.PCI0.LPCB.EC0.CREC.ECPD, 0x80)
+		Notify (\_SB.CREC.ECPD, 0x80)
 	}
 #endif
 
@@ -465,7 +465,7 @@ Device (EC0)
 		\_SB.DPTF.TPET()
 #endif
 #ifdef EC_ENABLE_TBMC_DEVICE
-		Notify (^CREC.TBMC, 0x80)
+		Notify (\_SB.CREC.TBMC, 0x80)
 #if CONFIG(SOC_INTEL_COMMON)
 		If (LEqual ((^TBMD), One)) {
 			Notify (VBTN, 0xCC)

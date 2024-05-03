@@ -29,7 +29,7 @@ const char *google_chromeec_acpi_name(const struct device *dev)
 	 * If we ever enable a separate driver for generating AML for EC0 device, then this
 	 * function needs to be updated to return "CREC".
 	 */
-	return "EC0.CREC";
+	return "\\SB.CREC";
 }
 
 /*

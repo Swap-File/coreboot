@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
+Scope (\_SB) {
 Device (CREC)
 {
 	Name (_HID, "GOOG0004")
@@ -75,7 +76,8 @@ Device (CREC)
 #if CONFIG(DRIVERS_ACPI_THERMAL_ZONE)
 	Method(TMP, 1)
 	{
-		Return(^^TSRD(Arg0))
+		Return(\_SB.PCI0.LPCB.EC0.TSRD(Arg0))
 	}
 #endif
+}
 }

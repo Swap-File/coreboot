@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
 /* Scope modified for coolstar's Windows driver */
-Scope (\_SB.PCI0.LPCB.EC0.CREC)
+Scope (\_SB.CREC)
 {
 	/*
 	 * Chrome EC Keyboard Backlight interface
