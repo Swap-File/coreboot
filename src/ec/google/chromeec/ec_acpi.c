@@ -29,7 +29,7 @@ const char *google_chromeec_acpi_name(const struct device *dev)
 	 * If we ever enable a separate driver for generating AML for EC0 device, then this
 	 * function needs to be updated to return "CREC".
 	 */
-	return "\\SB.CREC";
+	return "\\_SB_.CREC";
 }
 
 /*
@@ -171,7 +171,7 @@ static void fill_ssdt_typec_device(const struct device *dev)
 	if (rv || pcap_mask == 0)
 		return;
 
-	acpigen_write_scope(acpi_device_path(dev));
+	acpigen_write_scope(acpi_device_name(dev));
 	acpigen_write_device(GOOGLE_CHROMEEC_USBC_DEVICE_NAME);
 	acpigen_write_name_string("_HID", GOOGLE_CHROMEEC_USBC_DEVICE_HID);
 	acpigen_write_name_string("_DDN", "ChromeOS EC Embedded Controller "
@@ -262,7 +262,7 @@ static void fill_ssdt_ps2_keyboard(const struct device *dev)
 
 	/* add a copy under CKSC as well for coolstar's Windows divers
 	   only need a copy of the physmap, not keymap */
-	acpigen_ps2_keyboard_dsd("_SB.PCI0.LPCB.EC0.CREC.CKSC", keybd.num_top_row_keys,
+	acpigen_ps2_keyboard_dsd("_SB.CREC.CKSC", keybd.num_top_row_keys,
 				 ps2_action_keys,
 				 !!(keybd.capabilities & KEYBD_CAP_FUNCTION_KEYS),
 				 !!(keybd.capabilities & KEYBD_CAP_NUMERIC_KEYPAD),

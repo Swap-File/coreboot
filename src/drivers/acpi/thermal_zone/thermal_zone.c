@@ -105,7 +105,7 @@ static void thermal_zone_fill_ssdt(const struct device *dev)
 	 */
 	acpigen_write_method_serialized("_TMP", 0);
 	acpigen_emit_byte(RETURN_OP);
-	acpigen_emit_namestring(acpi_device_path_join(config->temperature_controller, "TMP"));
+	acpigen_emit_namestring("\\_SB_.CREC.TMP_");
 	acpigen_write_integer(config->sensor_id);
 	acpigen_write_method_end();
 
