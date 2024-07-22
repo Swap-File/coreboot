@@ -77,6 +77,31 @@ static void google_chromeec_reboot_ro(void)
 	halt();
 }
 
+static ssize_t burst = 0;
+
+/*
+ * Write a block into EC flash.  Expects params_data to be a buffer where
+ * the first N bytes are a struct ec_params_flash_write, and the rest of it
+ * is the data to write to flash.
+*/
+static int google_chromeec_sync_flash_write_block(const uint8_t *params_data,
+				uint32_t bufsize)
+{
+	struct chromeec_command cmd = {
+		.cmd_code = EC_CMD_FLASH_WRITE,
+		.cmd_version = burst == EC_FLASH_WRITE_VER0_SIZE ? 0 : EC_VER_FLASH_WRITE,
+		.cmd_size_out = 0,
+		.cmd_data_out = NULL,
+		.cmd_size_in = bufsize,
+		.cmd_data_in = params_data,
+		.cmd_dev_index = 0,
+	};
+
+	assert(params_data);
+
+	return google_chromeec_command(&cmd);
+}
+
 /*
  * Send an image to the EC in burst-sized chunks.
  */
@@ -86,37 +111,37 @@ static enum cb_err google_chromeec_flash_write(void *image, uint32_t region_offs
 	struct ec_response_get_protocol_info resp_proto;
 	struct ec_response_flash_info resp_flash;
 	ssize_t pdata_max_size;
-	ssize_t burst;
 	uint8_t *file_buf;
 	struct ec_params_flash_write *params;
 	uint32_t end, off;
 
 	/*
 	 * Get EC's protocol information, so that we can figure out how much
-	 * data can be sent in one message.
+	 * data can be sent in one message. If this fails, fall back to
+	 * EC_FLASH_WRITE_VER0_SIZE
 	 */
-	if (google_chromeec_get_protocol_info(&resp_proto)) {
-		printk(BIOS_ERR, "Failed to get EC protocol information; skipping flash write\n");
-		return CB_ERR;
+	if (google_chromeec_get_protocol_info(&resp_proto) == CB_SUCCESS) {
+		/*
+		 * Determine burst size.  This must be a multiple of the write block
+		 * size, and must also fit into the host parameter buffer.
+		 */
+		if (google_chromeec_flash_info(&resp_flash)) {
+			printk(BIOS_ERR, "Failed to get EC flash information; skipping flash write\n");
+			return CB_ERR;
+		}
+
+		/* Limit the potential buffer stack allocation to 1K */
+		pdata_max_size = MIN(1024, resp_proto.max_request_packet_size -
+					sizeof(struct ec_host_request));
+
+		/* Round burst to a multiple of the flash write block size */
+		burst = pdata_max_size - sizeof(*params);
+		burst = (burst / resp_flash.write_block_size) *
+			resp_flash.write_block_size;
+	} else {
+		printk(BIOS_WARNING, "Failed to get EC protocol information; using VER0 flash write size\n");
+		burst = EC_FLASH_WRITE_VER0_SIZE;
 	}
-
-	/*
-	 * Determine burst size.  This must be a multiple of the write block
-	 * size, and must also fit into the host parameter buffer.
-	 */
-	if (google_chromeec_flash_info(&resp_flash)) {
-		printk(BIOS_ERR, "Failed to get EC flash information; skipping flash write\n");
-		return CB_ERR;
-	}
-
-	/* Limit the potential buffer stack allocation to 1K */
-	pdata_max_size = MIN(1024, resp_proto.max_request_packet_size -
-				   sizeof(struct ec_host_request));
-
-	/* Round burst to a multiple of the flash write block size */
-	burst = pdata_max_size - sizeof(*params);
-	burst = (burst / resp_flash.write_block_size) *
-		resp_flash.write_block_size;
 
 	/* Buffer too small */
 	if (burst <= 0) {
@@ -145,7 +170,7 @@ static enum cb_err google_chromeec_flash_write(void *image, uint32_t region_offs
 		memcpy(params + 1, file_buf, todo);
 
 		/* Make sure to add back in the size of the parameters */
-		if (google_chromeec_flash_write_block(
+		if (google_chromeec_sync_flash_write_block(
 				(const uint8_t *)params, xfer_size)) {
 			printk(BIOS_ERR, "EC failed flash write command, "
 				"relative offset %u!\n", off - region_offset);
@@ -162,7 +187,7 @@ static enum cb_err google_chromeec_flash_write(void *image, uint32_t region_offs
  * Asks the EC to calculate a hash of the specified firmware image, and
  * returns the information in **hash and *hash_size.
  */
-static enum cb_err ec_hash_image(uint8_t **hash, int *hash_size)
+static enum cb_err ec_hash_image(uint8_t **hash, int *hash_size, int force_recalc)
 {
 	static struct ec_response_vboot_hash resp;
 	uint32_t hash_offset = EC_VBOOT_HASH_OFFSET_RW;
@@ -170,6 +195,14 @@ static enum cb_err ec_hash_image(uint8_t **hash, int *hash_size)
 	struct stopwatch sw;
 
 	stopwatch_init_msecs_expire(&sw, CROS_EC_HASH_TIMEOUT_MS);
+
+	if (force_recalc) {
+		if (google_chromeec_start_vboot_hash(EC_VBOOT_HASH_TYPE_SHA256,
+				hash_offset, &resp))
+			return CB_ERR;
+		mdelay(CROS_EC_HASH_CHECK_DELAY_MS);
+	}
+
 	do {
 		if (google_chromeec_get_vboot_hash(hash_offset, &resp))
 			return CB_ERR;
@@ -214,7 +247,7 @@ static enum cb_err ec_hash_image(uint8_t **hash, int *hash_size)
 			/* Hash is ready! */
 			break;
 		}
-	} while (resp.status == EC_VBOOT_HASH_STATUS_BUSY &&
+	} while (resp.status != EC_VBOOT_HASH_STATUS_DONE &&
 		 !stopwatch_expired(&sw));
 
 
@@ -334,7 +367,8 @@ static enum cb_err ec_sync(void)
 	printk(BIOS_DEBUG, "\n");
 
 	/* Get hash of current EC-RW */
-	if (ec_hash_image(&ec_hash, &ec_hash_size)) {
+	int force_recalc = 0;
+	if (ec_hash_image(&ec_hash, &ec_hash_size, force_recalc)) {
 		printk(BIOS_ERR, "Failed to read current EC_RW hash.\n");
 		return CB_ERR;
 	}
@@ -390,7 +424,8 @@ static enum cb_err ec_sync(void)
 		}
 
 		/* Have EC recompute hash for new EC_RW block */
-		if (ec_hash_image(&ec_hash, &ec_hash_size)) {
+		force_recalc = 1;
+		if (ec_hash_image(&ec_hash, &ec_hash_size, force_recalc)) {
 			printk(BIOS_ERR, "ChromeEC SW Sync: Failed to read new EC_RW hash.\n");
 			return CB_ERR;
 		}
