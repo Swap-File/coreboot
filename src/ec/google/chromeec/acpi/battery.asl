@@ -84,6 +84,12 @@ Method(BRSX, 1, Serialized)
 		Return ("")
 	}
 
+	// Short circuit for older pre-CR50 platforms which fail to correctly evaluate
+	// BRSS as 0, causing a boot hang under Windows.
+#if !CONFIG(TPM_GOOGLE)
+	BRSS = 0
+#endif
+
 	If (BRSS == 0xff)
 	{
 		// Write 0 to BSRF to read back a support indicator; nonzero and
